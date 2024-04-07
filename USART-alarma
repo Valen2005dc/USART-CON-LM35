@@ -1,0 +1,162 @@
+#include <stm32f401xe.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+ unsigned char dato;
+ int AD_C= 0;
+ int AD_C1= 0;
+ char texto [200];
+ char textoRec [200];
+int i=0;
+int ii=0;
+float alarma=0.0;
+unsigned char Caracter_end='H';
+
+
+void tex (char*t) //funcion tex
+{
+	int i=0;
+	while (t[i]!= 0 )
+		
+	{
+		while(!(USART6->SR&USART_SR_TXE));
+   	USART6->DR= t[i];
+		
+		i++;
+
+	}
+}
+
+
+double Conv(int d){
+	return (double)3.3*d/4095.0;
+}
+void recibirdato(unsigned char t)
+{
+		if(t!=0x0A){
+			if(ii==200){
+					ii=0;
+			}
+			if(t!=Caracter_end){
+        textoRec[ii]=t;
+			}
+			ii++;
+			
+			if(t==Caracter_end){
+					alarma= atof(textoRec);
+					for(int x=ii-1;x<200;x++){
+							textoRec[x]='\0';
+					}
+					ii=0;
+			}
+			
+					
+			
+		}
+    
+}
+
+
+
+
+extern "C"
+
+	void USART6_IRQHandler(void)
+	{
+		unsigned int dummy;
+  if(!(USART6->SR&USART_SR_RXNE))return;
+    // Se ejecuta interrupcion   
+    recibirdato((unsigned char)USART6->DR);
+		
+  dummy=USART6->SR; // Se limpian banderas
+  dummy=USART6->DR;
+
+}
+
+
+
+
+//		
+
+//		char texto[20];
+//dato=USART6->SR;//Limpiar banderas
+//dato=USART6->DR;//Lee dato
+//	
+//	while(!(USART6->SR&USART_SR_TXE));
+//		USART6->DR= ;
+//			
+//	
+//	}
+//}
+
+int main(void)
+
+{
+ // Configuración del ADC1 
+ RCC->APB2ENR|=RCC_APB2ENR_ADC1EN;// Se activa el módulo ADC1
+ ADC->CCR=(3UL<<16);// Se hace ADCCLK=PCLK2/8
+ ADC1->CR1=0;
+ ADC1->CR2|=ADC_CR2_ADON;// Se activa modulo ADC1
+ ADC1->SMPR1=0xFFFFFFFF;// Se fija máximo tiempo de muestreo
+ ADC1->SMPR2=0xFFFFFFFF;// Se fija máximo tiempo de muestreo
+ ADC1->SQR1=0;// Se fijan todas las secuencias en 0
+ ADC1->SQR2=0;// Se fijan todas las secuencias en 0
+ ADC1->SQR3=1;// Se fijan todas las secuencias en 1
+	 // Configuración pin PA0 análogo
+ RCC->AHB1ENR|=RCC_AHB1ENR_GPIOAEN;// Activa reloj GPIOA
+ GPIOA->MODER|=15UL;// Activa PA0 y A1 análogo
+	
+	GPIOA->MODER|=(01UL<<3);
+	
+	//Configuración de usart
+	RCC->AHB1ENR|=RCC_AHB1ENR_GPIOAEN;
+	RCC->AHB1ENR|=RCC_AHB1ENR_GPIOCEN;
+	RCC->AHB1ENR|=RCC_AHB1ENR_GPIOBEN;
+	GPIOB -> MODER |= 0X55555;
+	GPIOA -> MODER |= (2UL<<GPIO_MODER_MODER11_Pos);
+  GPIOA -> MODER |= (2UL<<GPIO_MODER_MODER12_Pos);
+	GPIOA -> AFR[1] |= (8UL<<GPIO_AFRH_AFSEL11_Pos);
+	GPIOA -> AFR[1] |= (8UL<<GPIO_AFRH_AFSEL12_Pos);
+	RCC->APB2ENR|= RCC_APB2ENR_USART6EN;
+  USART6->BRR=(unsigned int)(16000000/9600);
+	USART6->CR1|=(USART_CR1_RE|USART_CR1_TE);
+	USART6->CR2=0;
+	USART6->CR3=0;
+	USART6->CR1|=USART_CR1_UE;
+	NVIC_EnableIRQ(USART6_IRQn);
+	USART6->CR1|=USART_CR1_RXNEIE;
+	
+
+
+while(1)
+{
+ // Lectura de canal ADC 0
+	ADC1->SQR3=0;
+  ADC1->CR2|=ADC_CR2_SWSTART;// Se inicia la rutina de conversión
+  while(!(ADC1->SR&ADC_SR_EOC));// Se espera al fin de la conversión
+  AD_C =(unsigned int)ADC1->DR;// Se guarda el valor convertido en la variable
+	
+		ADC1->SQR3=1;
+  ADC1->CR2|=ADC_CR2_SWSTART;// Se inicia la rutina de conversión
+  while(!(ADC1->SR&ADC_SR_EOC));// Se espera al fin de la conversión
+  AD_C1 =(unsigned int)ADC1->DR;// Se guarda el valor convertido en GPIOC
+	
+	
+		sprintf(texto,"Esto es = %0.2f grados\r\n",Conv(AD_C1)*100);
+ 
+	
+    
+    tex(texto);
+	dato=USART6->SR;//Limpiar banderas
+	
+	if(Conv(AD_C)*13.3>=alarma||Conv(AD_C1)*13.3>=alarma)
+    {
+        GPIOB->ODR = (1UL<<0);
+    }else{
+			GPIOB->ODR = (0);
+		}
+	
+}
+return 0;	
+}
